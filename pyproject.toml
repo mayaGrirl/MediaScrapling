@@ -5,6 +5,9 @@ description = "One platform that runs MediaCrawler platform jobs and Scrapling w
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "pydantic-settings>=2.6",
+    "pymysql>=1.1",
+    "redis>=5.2",
     "scrapling[fetchers]>=0.2",
     "sqlalchemy>=2.0",
     "typer>=0.15",
