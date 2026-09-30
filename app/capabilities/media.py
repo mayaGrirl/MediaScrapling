@@ -13,19 +13,41 @@ class MediaCrawlerUnavailable(RuntimeError):
     pass
 
 
-def command(home: Path, job: Job) -> list[str]:
+def command(home: Path, job: Job, save_dir: Path, cookie: str = "") -> list[str]:
+    home = Path(home).resolve()
+    save_dir = Path(save_dir).resolve()
     python = home / (".venv/Scripts/python.exe" if sys.platform == "win32" else ".venv/bin/python")
     executable = str(python if python.exists() else Path(sys.executable))
+    mode, target = _mode(job)
     args = [
         executable,
-        "main.py",
+        str(Path(__file__).with_name("run_mediacrawler.py")),
+        str(home),
         "--platform",
         job.platform or "",
         "--type",
-        "detail" if job.url else "search",
+        mode,
         "--lt",
-        "qrcode",
+        "cookie" if cookie else "qrcode",
+        "--save_data_option",
+        "json",
+        "--save_data_path",
+        str(save_dir),
+        "--get_comment",
+        "false",
+        "--get_sub_comment",
+        "false",
+        "--crawler_max_notes_count",
+        "1",
+        "--headless",
+        "false",
     ]
+    if mode == "detail":
+        args.extend(["--specified_id", target])
+    else:
+        args.extend(["--keywords", target])
+    if cookie:
+        args.extend(["--cookies", cookie])
     return args
 
 
@@ -35,38 +57,55 @@ def run_media(job: Job, ctx: PlatformContext) -> tuple[VideoItem, str]:
         raise MediaCrawlerUnavailable(
             f"MediaCrawler not found at {home}. Clone https://github.com/NanmiCoder/MediaCrawler there."
         )
-    proxy = job.proxy or ctx.proxies.acquire()
-    cookie = ctx.sessions.get(job.cookie_key or (job.platform or "")) if job.platform or job.cookie_key else None
-    env = dict(**_base_env())
-    if proxy:
-        env["CRAWLER_PROXY"] = proxy
-    if cookie:
-        env["CRAWLER_COOKIE"] = cookie
-    env["CRAWLER_KEYWORD"] = job.keyword or job.url
-    env["CRAWLER_URL"] = job.url
-    completed = subprocess.run(
-        command(home, job),
-        cwd=home,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=ctx.settings.media_timeout_seconds,
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(completed.stderr.strip() or f"MediaCrawler exited {completed.returncode}")
-    payload = _read_result(home, completed.stdout)
+    save_dir = Path("data") / "media_jobs" / job.id
+    save_dir.mkdir(parents=True, exist_ok=True)
+    cookie = ""
+    if job.cookie_key:
+        cookie = ctx.sessions.get(job.cookie_key) or ""
+    log_path = save_dir / "mediacrawler.log"
+    completed = None
+    log_text = ""
+    for _attempt in range(2):
+        with log_path.open("w", encoding="utf-8") as handle:
+            completed = subprocess.run(
+                command(home, job, save_dir, cookie),
+                cwd=home,
+                env=_base_env(),
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=ctx.settings.media_timeout_seconds,
+                check=False,
+            )
+        log_text = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
+        if completed.returncode == 0 or "Execution context was destroyed" not in log_text:
+            break
+    if completed is None or completed.returncode != 0:
+        raise RuntimeError(_explain(log_text) or f"MediaCrawler exited {completed.returncode}")
+    payload = _read_result(save_dir)
+    if not payload:
+        raise RuntimeError(_explain(log_text) or "MediaCrawler finished without a content file.")
     html = str(payload.get("html") or "")
     item = VideoItem(
         job_id=job.id,
         platform=job.platform or "media",
-        source_url=str(payload.get("url") or job.url),
-        title=str(payload.get("title") or ""),
-        video_url=str(payload.get("video_url") or ""),
+        source_url=str(payload.get("aweme_url") or payload.get("url") or job.url),
+        title=str(payload.get("title") or payload.get("desc") or ""),
+        video_url=str(payload.get("video_download_url") or payload.get("video_url") or ""),
         cover_url=str(payload.get("cover_url") or ""),
         raw=payload,
     )
     return item, html
+
+
+def _mode(job: Job) -> tuple[str, str]:
+    url = job.url or ""
+    if "/video/" in url or "/note/" in url:
+        return "detail", url
+    keyword = (job.keyword or "").strip()
+    if keyword:
+        return "search", keyword
+    return "search", "抖音"
 
 
 def _base_env() -> dict[str, str]:
@@ -75,11 +114,28 @@ def _base_env() -> dict[str, str]:
     return dict(os.environ)
 
 
-def _read_result(home: Path, stdout: str) -> dict:
-    marker = home / "data" / "platform_result.json"
-    if marker.exists():
-        return json.loads(marker.read_text(encoding="utf-8"))
-    text = stdout.strip()
-    if text.startswith("{"):
-        return json.loads(text.splitlines()[-1])
-    return {"stdout": text}
+def _read_result(save_dir: Path) -> dict:
+    files = sorted(save_dir.rglob("*contents*.json"), key=lambda path: path.stat().st_mtime)
+    if not files:
+        return {}
+    data = json.loads(files[-1].read_text(encoding="utf-8"))
+    if isinstance(data, list):
+        return data[-1] if data else {}
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def _explain(text: str) -> str:
+    if "qrcode not found" in text or "login dialog box does not pop up" in text:
+        return "抖音没有出现登录二维码，这次没有抓到视频。请在弹出的浏览器里手动登录，或在新建任务时填入已登录的 Cookie 后再入队。"
+    if "Executable doesn't exist" in text:
+        return "浏览器组件还没安装完成。请稍后重新入队。"
+    return _tail(text)
+
+
+def _tail(text: str, limit: int = 1200) -> str:
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[-limit:]

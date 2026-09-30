@@ -37,12 +37,26 @@ class VideoRow(Base):
     raw: Mapped[dict] = mapped_column(JSON)
 
 
+class LogRow(Base):
+    __tablename__ = "logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    job_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    level: Mapped[str] = mapped_column(String(16), default="info")
+    message: Mapped[str] = mapped_column(Text)
+
+
 class Store:
     def __init__(self, settings: Settings):
         self._engine = create_engine(settings.mysql_url, pool_pre_ping=True)
 
     def create_tables(self) -> None:
-        Base.metadata.create_all(self._engine)
+        try:
+            Base.metadata.create_all(self._engine)
+        except Exception as exc:
+            if "already exists" not in str(exc):
+                raise
         columns = {column["name"] for column in inspect(self._engine).get_columns("jobs")}
         if "created_at" not in columns:
             with self._engine.begin() as connection:
@@ -75,15 +89,73 @@ class Store:
                 .limit(limit)
                 .all()
             )
+            return [self._job(row) for row in rows]
+
+    def get_job(self, job_id: str) -> Job | None:
+        with Session(self._engine) as session:
+            row = session.get(JobRow, job_id)
+            if row is None:
+                return None
+            return self._job(row)
+
+    def delete_job(self, job_id: str) -> None:
+        with Session(self._engine) as session:
+            session.query(VideoRow).filter(VideoRow.job_id == job_id).delete()
+            row = session.get(JobRow, job_id)
+            if row is not None:
+                session.delete(row)
+            session.commit()
+
+    def list_videos(self, limit: int = 50) -> list[VideoItem]:
+        with Session(self._engine) as session:
+            rows = session.query(VideoRow).order_by(VideoRow.id.desc()).limit(limit).all()
             return [
-                Job(
-                    id=row.id,
-                    url=row.url,
-                    keyword=row.keyword,
-                    capability=row.capability,  # type: ignore[arg-type]
+                VideoItem(
+                    job_id=row.job_id,
                     platform=row.platform,
-                    status=row.status,
-                    error=row.error,
+                    source_url=row.source_url,
+                    title=row.title,
+                    video_url=row.video_url,
+                    cover_url=row.cover_url,
+                    raw={"id": row.id, **(row.raw or {})},
                 )
                 for row in rows
             ]
+
+    def delete_video(self, video_id: int) -> None:
+        with Session(self._engine) as session:
+            row = session.get(VideoRow, video_id)
+            if row is not None:
+                session.delete(row)
+                session.commit()
+
+    def add_log(self, job_id: str, level: str, message: str) -> None:
+        with Session(self._engine) as session:
+            session.add(LogRow(job_id=job_id, level=level, message=message[:4000]))
+            session.commit()
+
+    def list_logs(self, limit: int = 200) -> list[dict]:
+        with Session(self._engine) as session:
+            rows = session.query(LogRow).order_by(LogRow.id.desc()).limit(limit).all()
+            return [
+                {
+                    "id": row.id,
+                    "created_at": row.created_at.isoformat(sep=" ", timespec="seconds") if row.created_at else "",
+                    "job_id": row.job_id,
+                    "level": row.level,
+                    "message": row.message,
+                }
+                for row in reversed(rows)
+            ]
+
+    @staticmethod
+    def _job(row: JobRow) -> Job:
+        return Job(
+            id=row.id,
+            url=row.url,
+            keyword=row.keyword,
+            capability=row.capability,  # type: ignore[arg-type]
+            platform=row.platform,
+            status=row.status,
+            error=row.error,
+        )

@@ -100,7 +100,7 @@ uv run crawler --help
 uv run crawler ui
 ```
 
-浏览器地址是 `http://127.0.0.1:8080`。服务先完成监听，再打开浏览器。页面上可以填写 `http` 或 `https` 网址入队、添加代理、查看任务。列表按创建时间倒序，每 3 秒刷新。网页里发现的已知站点链接会作为新任务出现在同一张表里。
+浏览器地址是 `http://127.0.0.1:8080`。服务先完成监听，再打开浏览器。页面上可以填写 `http` 或 `https` 网址入队、删除还没跑完的任务。采集结果在当前页播放视频、显示封面，并预览网页。采集过程写在单独页面 `http://127.0.0.1:8080/logs`。列表每 3 秒刷新。网页里发现的已知站点链接会作为新任务出现在同一张表里。代理由 MediaCrawler 和 Scrapling 在采集过程中处理，控制台不单独配置代理池。
 
 `--host 0.0.0.0` 时页面仍用本机 `127.0.0.1` 打开。不需要弹浏览器时加 `--no-browser`。
 
@@ -134,12 +134,6 @@ uv run crawler jobs --limit 20
 
 ```powershell
 uv run crawler worker --once
-```
-
-加入代理。worker 在任务自己没带代理时，从池里随机取一条。
-
-```powershell
-uv run crawler proxy-add http://127.0.0.1:7890
 ```
 
 Windows 也可以：

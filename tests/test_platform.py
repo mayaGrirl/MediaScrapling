@@ -27,11 +27,16 @@ def test_classify_known_and_unknown():
 
 def test_media_command_shape():
     job = Job(url="https://www.douyin.com/video/1", capability="media", platform="dy")
-    args = command(Path("third_party/MediaCrawler"), job)
-    assert args[1] == "main.py"
-    assert "--platform" in args
+    args = command(Path("third_party/MediaCrawler"), job, Path("data/media_jobs/demo"))
+    assert "run_mediacrawler.py" in args[1]
     assert args[args.index("--platform") + 1] == "dy"
-    assert "detail" in args
+    assert args[args.index("--type") + 1] == "detail"
+    assert args[args.index("--specified_id") + 1] == job.url
+
+    home = Job(url="https://www.douyin.com/", capability="media", platform="dy", keyword="")
+    args = command(Path("third_party/MediaCrawler"), home, Path("data/media_jobs/demo"))
+    assert args[args.index("--type") + 1] == "search"
+    assert args[args.index("--keywords") + 1] == "抖音"
 
 
 def test_html_enrich_uses_parser():

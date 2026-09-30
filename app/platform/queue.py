@@ -23,5 +23,14 @@ class JobQueue:
             return None
         return Job.model_validate_json(item[1])
 
+    def remove(self, job_id: str) -> None:
+        for raw in self._redis.lrange(QUEUE_KEY, 0, -1):
+            try:
+                job = Job.model_validate_json(raw)
+            except ValueError:
+                continue
+            if job.id == job_id:
+                self._redis.lrem(QUEUE_KEY, 0, raw)
+
     def length(self) -> int:
         return int(self._redis.llen(QUEUE_KEY))
