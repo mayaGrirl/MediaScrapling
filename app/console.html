@@ -37,9 +37,11 @@
       <form id="crawl">
         <input name="url" required placeholder="https://example.com 或视频页面地址" />
         <input name="keyword" placeholder="关键词，首页采集时必填，例如 美食" />
-        <input name="cookie" placeholder="抖音 Cookie，扫码失败时填写，可留空" />
+        <input name="limit" type="number" min="1" max="200" value="10" style="flex:0; min-width:90px" title="目标条数" />
+        <input name="cookie" placeholder="Cookie 可留空，公开页面不需要登录" />
         <button type="submit">入队</button>
       </form>
+      <p class="muted">条数填目标数量。没凑够会继续往下翻，连续 3 屏没有新视频才停止。代理池每 5 分钟从公开列表重测，只保留可用的，当前 <span id="proxy-count">-</span> 个。</p>
       <p class="muted" id="crawl-msg"></p>
     </section>
     <section>
@@ -65,10 +67,12 @@
     let lastVideos = "";
 
     async function refresh() {
-      const [jobRows, videoRows] = await Promise.all([
+      const [jobRows, videoRows, proxyInfo] = await Promise.all([
         fetch("/api/jobs").then((r) => r.json()),
         fetch("/api/videos").then((r) => r.json()),
+        fetch("/api/proxies").then((r) => r.json()).catch(() => ({ count: 0 })),
       ]);
+      document.querySelector("#proxy-count").textContent = proxyInfo.count;
       const jobsKey = JSON.stringify(jobRows);
       const videosKey = JSON.stringify(videoRows);
       if (jobsKey !== lastJobs) {
@@ -92,10 +96,22 @@
             <button class="danger" data-video="${escapeHtml(item.raw.id)}">删除</button>
           </div>
           ${item.video_url ? `<video controls src="${escapeHtml(item.video_url)}" ${item.cover_url ? `poster="${escapeHtml(item.cover_url)}"` : ""}></video>` : ""}
-          ${item.cover_url ? `<img class="cover" src="${escapeHtml(item.cover_url)}" alt="封面" />` : ""}
-          ${item.raw.preview_html ? `<iframe sandbox srcdoc="${escapeHtml(item.raw.preview_html)}"></iframe>` : `<iframe sandbox src="${escapeHtml(item.source_url)}"></iframe>`}
+          ${item.cover_url ? `<img class="cover" src="${coverSrc(item.cover_url)}" alt="封面" />` : ""}
+          ${preview(item)}
         </article>`).join("") || `<p class="muted">还没有结果</p>`;
       }
+    }
+
+    function coverSrc(url) {
+      if (url.includes("douyinpic.com")) return "/api/media?url=" + encodeURIComponent(url);
+      return escapeHtml(url);
+    }
+
+    function preview(item) {
+      if (item.raw.preview_html) return `<iframe sandbox srcdoc="${escapeHtml(item.raw.preview_html)}"></iframe>`;
+      const url = item.source_url || "";
+      if (url.includes("douyin.com")) return "";
+      return `<iframe sandbox src="${escapeHtml(url)}"></iframe>`;
     }
 
     function link(url, label) {
@@ -112,6 +128,7 @@
     document.querySelector("#crawl").addEventListener("submit", async (event) => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(event.target));
+      data.limit = Number(data.limit || 10);
       const response = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

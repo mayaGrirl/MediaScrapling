@@ -7,6 +7,8 @@
   <style>
     body { margin: 0; background: #101820; color: #d7e0ea; font-family: Consolas, "Segoe UI", sans-serif; }
     header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: #16324f; }
+    header span { display: flex; gap: 16px; align-items: center; }
+    button { border: 0; background: #b42318; color: #fff; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
     a { color: #9cc4ff; }
     pre { margin: 0; padding: 20px 24px; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; }
     .error { color: #ffb4ab; } .warning { color: #ffd58a; } .info { color: #d7e0ea; }
@@ -15,7 +17,10 @@
 <body>
   <header>
     <strong>采集日志</strong>
-    <a href="/">返回操作台</a>
+    <span>
+      <button id="clear" type="button">清屏</button>
+      <a href="/">返回操作台</a>
+    </span>
   </header>
   <pre id="lines">正在读取日志…</pre>
   <script>
@@ -31,6 +36,10 @@
         ? rows.map((row) => `<span class="${escapeHtml(row.level)}">${escapeHtml(row.created_at)} ${escapeHtml(row.level)} ${escapeHtml(row.job_id)} ${escapeHtml(row.message)}</span>`).join("\n")
         : "还没有采集日志。回到操作台入队后，这里会显示开始、发现链接、完成和失败。";
     }
+    document.querySelector("#clear").addEventListener("click", async () => {
+      await fetch("/api/logs", { method: "DELETE" });
+      lines.textContent = "日志已清空。";
+    });
     refresh();
     setInterval(refresh, 2000);
   </script>

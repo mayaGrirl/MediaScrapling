@@ -22,6 +22,7 @@ class JobRow(Base):
     status: Mapped[str] = mapped_column(String(32))
     error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    target_count: Mapped[int] = mapped_column(default=1)
 
 
 class VideoRow(Base):
@@ -61,6 +62,13 @@ class Store:
         if "created_at" not in columns:
             with self._engine.begin() as connection:
                 connection.execute(text("ALTER TABLE jobs ADD COLUMN created_at DATETIME NULL"))
+        if "target_count" not in columns:
+            try:
+                with self._engine.begin() as connection:
+                    connection.execute(text("ALTER TABLE jobs ADD COLUMN target_count INT NOT NULL DEFAULT 1"))
+            except Exception as exc:
+                if "Duplicate column" not in str(exc):
+                    raise
 
     def save_job(self, job: Job) -> None:
         with Session(self._engine) as session:
@@ -74,6 +82,7 @@ class Store:
             row.platform = job.platform
             row.status = job.status
             row.error = job.error
+            row.target_count = job.target_count
             session.commit()
 
     def save_video(self, item: VideoItem) -> None:
@@ -134,6 +143,11 @@ class Store:
             session.add(LogRow(job_id=job_id, level=level, message=message[:4000]))
             session.commit()
 
+    def clear_logs(self) -> None:
+        with Session(self._engine) as session:
+            session.query(LogRow).delete()
+            session.commit()
+
     def list_logs(self, limit: int = 200) -> list[dict]:
         with Session(self._engine) as session:
             rows = session.query(LogRow).order_by(LogRow.id.desc()).limit(limit).all()
@@ -158,4 +172,5 @@ class Store:
             platform=row.platform,
             status=row.status,
             error=row.error,
+            target_count=row.target_count or 1,
         )

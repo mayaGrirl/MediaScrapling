@@ -17,3 +17,10 @@ class ProxyPool:
 
     def list(self) -> list[str]:
         return sorted(self._redis.smembers(PROXY_KEY))
+
+    def replace(self, proxy_urls: list[str]) -> None:
+        pipe = self._redis.pipeline()
+        pipe.delete(PROXY_KEY)
+        if proxy_urls:
+            pipe.sadd(PROXY_KEY, *proxy_urls)
+        pipe.execute()

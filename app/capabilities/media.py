@@ -38,7 +38,7 @@ def command(home: Path, job: Job, save_dir: Path, cookie: str = "") -> list[str]
         "--get_sub_comment",
         "false",
         "--crawler_max_notes_count",
-        "1",
+        str(max(1, job.target_count)),
         "--headless",
         "false",
     ]
@@ -51,7 +51,7 @@ def command(home: Path, job: Job, save_dir: Path, cookie: str = "") -> list[str]
     return args
 
 
-def run_media(job: Job, ctx: PlatformContext) -> tuple[VideoItem, str]:
+def run_media(job: Job, ctx: PlatformContext) -> tuple[list[VideoItem], str]:
     home = Path(ctx.settings.mediacrawler_home)
     if not (home / "main.py").exists():
         raise MediaCrawlerUnavailable(
@@ -70,10 +70,12 @@ def run_media(job: Job, ctx: PlatformContext) -> tuple[VideoItem, str]:
             completed = subprocess.run(
                 command(home, job, save_dir, cookie),
                 cwd=home,
-                env=_base_env(),
+                env=_base_env(job),
                 stdout=handle,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=ctx.settings.media_timeout_seconds,
                 check=False,
             )
@@ -82,20 +84,23 @@ def run_media(job: Job, ctx: PlatformContext) -> tuple[VideoItem, str]:
             break
     if completed is None or completed.returncode != 0:
         raise RuntimeError(_explain(log_text) or f"MediaCrawler exited {completed.returncode}")
-    payload = _read_result(save_dir)
-    if not payload:
+    payloads = _read_results(save_dir)[: max(1, job.target_count)]
+    if not payloads:
         raise RuntimeError(_explain(log_text) or "MediaCrawler finished without a content file.")
-    html = str(payload.get("html") or "")
-    item = VideoItem(
-        job_id=job.id,
-        platform=job.platform or "media",
-        source_url=str(payload.get("aweme_url") or payload.get("url") or job.url),
-        title=str(payload.get("title") or payload.get("desc") or ""),
-        video_url=str(payload.get("video_download_url") or payload.get("video_url") or ""),
-        cover_url=str(payload.get("cover_url") or ""),
-        raw=payload,
-    )
-    return item, html
+    html = str(payloads[0].get("html") or "")
+    items = [
+        VideoItem(
+            job_id=job.id,
+            platform=job.platform or "media",
+            source_url=str(payload.get("aweme_url") or payload.get("url") or job.url),
+            title=str(payload.get("title") or payload.get("desc") or ""),
+            video_url=str(payload.get("video_download_url") or payload.get("video_url") or ""),
+            cover_url=str(payload.get("cover_url") or ""),
+            raw=payload,
+        )
+        for payload in payloads
+    ]
+    return items, html
 
 
 def _mode(job: Job) -> tuple[str, str]:
@@ -108,22 +113,28 @@ def _mode(job: Job) -> tuple[str, str]:
     return "search", "抖音"
 
 
-def _base_env() -> dict[str, str]:
+def _base_env(job: Job) -> dict[str, str]:
     import os
 
-    return dict(os.environ)
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    env["MEDIASCRAPLING_LIMIT"] = str(max(1, job.target_count))
+    if job.proxy:
+        env["MEDIASCRAPLING_PROXY"] = job.proxy
+    return env
 
 
-def _read_result(save_dir: Path) -> dict:
+def _read_results(save_dir: Path) -> list[dict]:
     files = sorted(save_dir.rglob("*contents*.json"), key=lambda path: path.stat().st_mtime)
     if not files:
-        return {}
+        return []
     data = json.loads(files[-1].read_text(encoding="utf-8"))
     if isinstance(data, list):
-        return data[-1] if data else {}
+        return [item for item in data if isinstance(item, dict)]
     if isinstance(data, dict):
-        return data
-    return {}
+        return [data]
+    return []
 
 
 def _explain(text: str) -> str:

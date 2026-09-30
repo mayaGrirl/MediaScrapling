@@ -17,6 +17,7 @@ class Job(BaseModel):
     error: str = ""
     proxy: str | None = None
     cookie_key: str | None = None
+    target_count: int = 1
 
 
 class VideoItem(BaseModel):

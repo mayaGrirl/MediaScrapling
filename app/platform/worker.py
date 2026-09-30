@@ -23,24 +23,28 @@ def execute(job: Job, ctx: PlatformContext) -> Job:
     _log(ctx, job.id, "info", f"开始 {job.capability} {job.platform or '-'} {job.url}")
     try:
         if job.capability == "media":
-            item, html = run_media(job, ctx)
-            item = enrich_with_web(item, html)
+            if not job.proxy:
+                _log(ctx, job.id, "info", "代理池暂无可用代理，本次直连")
+            items, html = run_media(job, ctx)
+            items = [enrich_with_web(item, html) for item in items]
         else:
             item, html = run_web(job, ctx)
+            items = [item]
             children = promote_known_links(html, job.url, ctx, job)
             for child in children:
                 ctx.store.save_job(child)
                 _log(ctx, job.id, "info", f"发现已知站点，已入队 {child.platform} {child.url}")
-        if html:
-            item.raw = {**item.raw, "preview_html": html[:20000]}
         current = ctx.store.get_job(job.id)
         if current is None or current.status == "cancelled":
             _log(ctx, job.id, "warning", "任务已停止，丢弃结果")
             return job
-        ctx.store.save_video(item)
+        for item in items:
+            if html and job.capability != "media":
+                item.raw = {**item.raw, "preview_html": html[:20000]}
+            ctx.store.save_video(item)
         job.status = "done"
         job.error = ""
-        _log(ctx, job.id, "info", f"完成 title={item.title or '-'} video={item.video_url or '-'} cover={item.cover_url or '-'}")
+        _log(ctx, job.id, "info", f"完成 {len(items)}/{job.target_count} 条")
     except MediaCrawlerUnavailable as exc:
         job.status = "failed"
         job.error = str(exc)
@@ -54,6 +58,23 @@ def execute(job: Job, ctx: PlatformContext) -> Job:
     return job
 
 
+def _start_proxy_refresh(ctx: PlatformContext) -> None:
+    import threading
+
+    from app.platform.proxy_refresh import refresh
+
+    def loop() -> None:
+        while True:
+            try:
+                count = refresh(ctx.proxies)
+                _log(ctx, "", "info", f"代理池更新，可用 {count} 个")
+            except Exception:
+                log.exception("proxy refresh failed")
+            threading.Event().wait(300)
+
+    threading.Thread(target=loop, name="proxy-refresh", daemon=True).start()
+
+
 def _log(ctx: PlatformContext, job_id: str, level: str, message: str) -> None:
     getattr(log, level if level != "error" else "error")("%s %s", job_id, message)
     ctx.store.add_log(job_id, level, message)
@@ -62,6 +83,7 @@ def _log(ctx: PlatformContext, job_id: str, level: str, message: str) -> None:
 def serve(ctx: PlatformContext, once: bool = False) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     ctx.store.create_tables()
+    _start_proxy_refresh(ctx)
     _log(ctx, "", "info", "采集进程已启动")
     for job in ctx.store.list_jobs(200):
         if job.status == "running":
