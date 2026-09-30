@@ -14,7 +14,7 @@ MediaScrapling 把 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) �
 | --- | --- | --- |
 | 平台能力 | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | 小红书、抖音、快手、B 站、微博、贴吧、知乎。登录和站点采集留在上游，本仓库不复制它的源码。 |
 | 网页能力 | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | 普通网页的请求和 HTML 解析。`scrapling[fetchers]` 是本项目的 Python 依赖。 |
-| 平台本身 | 本仓库 | 任务、队列、代理、会话、落库，以及两边互相交接。 |
+| 平台本身 | 本仓库 | 任务、队列、代理、会话、落库、可视化操作界面，以及两边互相交接。 |
 
 合成之后的行为：
 
@@ -239,7 +239,7 @@ MediaScrapling is the control plane for [MediaCrawler](https://github.com/NanmiC
 | --- | --- | --- |
 | Platform capability | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, Tieba, Zhihu. This repo does not vendor that code. |
 | Web capability | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | HTTP fetch and HTML parsing via the `scrapling[fetchers]` dependency. |
-| Platform | This repo | Jobs, queue, proxies, sessions, storage, and the hand-off between the two. |
+| Platform | This repo | Jobs, queue, proxies, sessions, storage, the browser console, and the hand-off between the two. |
 
 A page fetched by Scrapling that links to a known host enqueues a MediaCrawler job on the same queue. HTML returned by MediaCrawler is parsed by Scrapling to fill an empty title, video URL, or cover. MediaCrawler runs as a short-lived child process because its global config and browser cannot share an interpreter with Scrapling.
 
