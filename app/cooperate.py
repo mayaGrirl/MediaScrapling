@@ -23,11 +23,11 @@ def promote_known_links(html: str, base_url: str, ctx: PlatformContext, parent: 
     created: list[Job] = []
     for url in links(html, base_url):
         capability, platform = classify(url)
-        if capability != "media":
+        if capability not in {"media", "resolve"}:
             continue
         job = Job(
             url=url,
-            capability="media",
+            capability=capability,
             platform=platform,
             proxy=parent.proxy,
             cookie_key=platform,

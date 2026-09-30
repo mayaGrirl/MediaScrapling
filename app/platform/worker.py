@@ -3,6 +3,7 @@
 import logging
 
 from app.capabilities.media import MediaCrawlerUnavailable, run_media
+from app.capabilities.resolve import run_resolve
 from app.capabilities.web import run_web
 from app.cooperate import enrich_with_web, promote_known_links
 from app.platform.context import PlatformContext
@@ -22,7 +23,10 @@ def execute(job: Job, ctx: PlatformContext) -> Job:
     ctx.store.save_job(job)
     _log(ctx, job.id, "info", f"开始 {job.capability} {job.platform or '-'} {job.url}")
     try:
-        if job.capability == "media":
+        if job.capability == "resolve":
+            items = run_resolve(job)
+            html = ""
+        elif job.capability == "media":
             if not job.proxy:
                 _log(ctx, job.id, "info", "代理池暂无可用代理，本次直连")
             items, html = run_media(job, ctx)

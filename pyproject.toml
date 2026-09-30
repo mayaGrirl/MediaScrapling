@@ -12,6 +12,7 @@ dependencies = [
     "scrapling[fetchers]>=0.2",
     "sqlalchemy>=2.0",
     "typer>=0.15",
+    "yt-dlp>=2025.1",
     "uvicorn>=0.32",
 ]
 

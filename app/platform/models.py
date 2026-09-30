@@ -4,7 +4,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 
-Capability = Literal["media", "web"]
+Capability = Literal["media", "web", "resolve"]
 
 
 class Job(BaseModel):
@@ -62,8 +62,36 @@ def platform_for_url(url: str) -> str | None:
     return None
 
 
+RESOLVE_HOSTS: dict[str, str] = {
+    "youtube.com": "youtube",
+    "www.youtube.com": "youtube",
+    "youtu.be": "youtube",
+    "m.youtube.com": "youtube",
+    "tiktok.com": "tiktok",
+    "www.tiktok.com": "tiktok",
+    "vm.tiktok.com": "tiktok",
+    "vimeo.com": "vimeo",
+    "www.vimeo.com": "vimeo",
+    "twitter.com": "twitter",
+    "www.twitter.com": "twitter",
+    "x.com": "twitter",
+}
+
+
+def _host(url: str) -> str:
+    from urllib.parse import urlparse
+
+    return (urlparse(url).hostname or "").lower()
+
+
 def classify(url: str) -> tuple[Capability, str | None]:
+    host = _host(url)
+    for suffix, name in RESOLVE_HOSTS.items():
+        if host == suffix or host.endswith("." + suffix):
+            return "resolve", name
     platform = platform_for_url(url)
+    if platform in {"dy", "bili", "ks"} and "/video/" in url:
+        return "resolve", platform
     if platform:
         return "media", platform
     return "web", None

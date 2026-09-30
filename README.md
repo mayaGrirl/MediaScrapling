@@ -2,7 +2,7 @@
 
 [简体中文](#简体中文) · [English](#english)
 
-MediaScrapling 把 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) 和 [Scrapling](https://github.com/D4Vinci/Scrapling) 放进**同一个平台**。你只启动一个 worker，只维护一条 Redis 队列、一个代理池、一个 Cookie 库和一张 MySQL 结果表。
+MediaScrapling 是这些采集项目的**同一个入口**。你只启动一个 worker，只维护一条 Redis 队列、一个代理池、一个 Cookie 库和一张 MySQL 结果表。具体视频链接用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 解析，国内站点的搜索和主页用 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)，其余网页用 [Scrapling](https://github.com/D4Vinci/Scrapling)。
 
 <a id="简体中文"></a>
 
@@ -12,9 +12,12 @@ MediaScrapling 把 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) �
 
 | 部分 | 来源 | 在本平台里做什么 |
 | --- | --- | --- |
-| 平台能力 | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | 小红书、抖音、快手、B 站、微博、贴吧、知乎。登录和站点采集留在上游，本仓库不复制它的源码。 |
-| 网页能力 | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | 普通网页的请求和 HTML 解析。`scrapling[fetchers]` 是本项目的 Python 依赖。 |
-| 平台本身 | 本仓库 | 任务、队列、代理、会话、落库、可视化操作界面，以及两边互相交接。 |
+| 链接解析 | [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) | 具体视频地址。YouTube、TikTok、Vimeo、X，以及抖音 / 快手 / B 站的 `/video/` 链接。进程内调用，不单独起服务。同一类链接也是 [Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API) 的主要用途，这里不再另起一套 API。 |
+| 平台搜索 | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | 小红书、抖音、快手、B 站、微博、贴吧、知乎的首页和搜索。源码在 `third_party/MediaCrawler`，不复制进本仓库。未登录时这些站点经常拒绝接口。 |
+| 账号接口 | [ShilongLee/Crawler](https://github.com/ShilongLee/Crawler) | 同一批国内平台，但上游要求先添加账号。本平台不内嵌它的服务。需要时单独部署，结果仍应写回这里的队列，而不是再做一个控制台。 |
+| 已登录浏览器 | [iszhouhua/social-media-copilot](https://github.com/iszhouhua/social-media-copilot) | 小红书、抖音、快手的浏览器插件，用你自己的登录态。它不是 Python 库，不能塞进 worker。插件采到的公开字段可以经本平台的入队接口写入同一张结果表。 |
+| 网页能力 | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | 上面都不匹配的网页，例如视频号首页。只拿页面能看到的标题和链接，不保证有视频文件。 |
+| 平台本身 | 本仓库 | 任务、队列、代理、会话、落库、可视化操作界面。入口只有 `http://127.0.0.1:8080`。 |
 
 合成之后的行为：
 
@@ -38,6 +41,7 @@ app/platform/store.py      MySQL 表 jobs、videos
 app/platform/worker.py     唯一消费循环
 app/capabilities/web.py    Scrapling 抓取与字段解析
 app/capabilities/media.py  调用 MediaCrawler 一次并读回 JSON
+app/capabilities/resolve.py 用 yt-dlp 解析具体视频链接
 app/cooperate.py           HTML 补字段；已知链接升级为平台任务
 docker/                    一个 platform 服务 + Redis + MySQL
 scripts/run_local.ps1      Windows 本机启动 worker
@@ -225,13 +229,16 @@ MediaCrawler 上游是非商业学习许可。Scrapling 使用它自己的许可
 
 ## English
 
-MediaScrapling is the control plane for [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) and [Scrapling](https://github.com/D4Vinci/Scrapling). One worker, one Redis queue, one proxy pool, one cookie store, one MySQL schema.
+MediaScrapling is one entry for several crawlers. One worker, one Redis queue, one proxy pool, one cookie store, one MySQL schema. Concrete video URLs go through [yt-dlp](https://github.com/yt-dlp/yt-dlp). Chinese site search and homepages go through [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler). Everything else goes through [Scrapling](https://github.com/D4Vinci/Scrapling).
 
 ### What lives where
 
 | Piece | Source | Responsibility here |
 | --- | --- | --- |
-| Platform capability | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, Tieba, Zhihu. This repo does not vendor that code. |
+| Link resolve | [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) | A concrete video URL: YouTube, TikTok, Vimeo, X, and `/video/` links on Douyin, Kuaishou, and Bilibili. In-process. This covers the same job as [Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API) without starting that API server. |
+| Platform search | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Homepages and keyword search for Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, Tieba, and Zhihu. Cloned under `third_party/MediaCrawler`. These sites often reject anonymous API calls. |
+| Account API | [ShilongLee/Crawler](https://github.com/ShilongLee/Crawler) | Same Chinese sites, but that project requires an added account. It is not embedded. Deploy it separately and keep results on this queue. |
+| Logged-in browser | [iszhouhua/social-media-copilot](https://github.com/iszhouhua/social-media-copilot) | Browser extension for Xiaohongshu, Douyin, and Kuaishou. It is not a Python library. Fields it collects can be posted to this platform's enqueue API. |
 | Web capability | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | HTTP fetch and HTML parsing via the `scrapling[fetchers]` dependency. |
 | Platform | This repo | Jobs, queue, proxies, sessions, storage, the browser console, and the hand-off between the two. |
 

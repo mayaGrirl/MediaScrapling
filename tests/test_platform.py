@@ -17,12 +17,18 @@ HTML = """
 
 
 def test_classify_known_and_unknown():
-    capability, platform = classify("https://www.bilibili.com/video/BV1")
-    assert capability == "media"
-    assert platform == "bili"
     capability, platform = classify("https://example.com/watch")
     assert capability == "web"
     assert platform is None
+    capability, platform = classify("https://www.youtube.com/watch?v=abc")
+    assert capability == "resolve"
+    assert platform == "youtube"
+    capability, platform = classify("https://www.bilibili.com/video/BV1")
+    assert capability == "resolve"
+    assert platform == "bili"
+    capability, platform = classify("https://www.douyin.com/")
+    assert capability == "media"
+    assert platform == "dy"
 
 
 def test_media_command_shape():
@@ -65,6 +71,6 @@ def test_known_link_becomes_media_job():
     parent = Job(url="https://example.com", capability="web")
     created = promote_known_links(HTML, parent.url, _Ctx(), parent)
     assert len(created) == 1
-    assert created[0].capability == "media"
+    assert created[0].capability == "resolve"
     assert created[0].platform == "bili"
     assert created[0].url.startswith("https://www.bilibili.com/")

@@ -73,8 +73,33 @@ def _skip_forced_login() -> None:
         return True
 
     DouYinClient.pong = pong
+    _skip_other_platform_login()
     _open_public_feed()
     _fill_from_page_when_search_empty()
+
+
+def _skip_other_platform_login() -> None:
+    """Public pages on the other MediaCrawler platforms should not wait for a QR code."""
+    import importlib
+
+    targets = (
+        ("media_platform.xhs.client", "XiaoHongShuClient"),
+        ("media_platform.kuaishou.client", "KuaiShouClient"),
+        ("media_platform.bilibili.client", "BilibiliClient"),
+        ("media_platform.weibo.client", "WeiboClient"),
+        ("media_platform.tieba.client", "BaiduTieBaClient"),
+        ("media_platform.zhihu.client", "ZhiHuClient"),
+    )
+
+    async def pong(self, *args, **kwargs):
+        update = getattr(self, "update_cookies", None)
+        if update is not None and args:
+            await update(args[0])
+        return True
+
+    for module_name, class_name in targets:
+        client_cls = getattr(importlib.import_module(module_name), class_name)
+        client_cls.pong = pong
 
 
 def _open_public_feed() -> None:
