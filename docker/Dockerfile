@@ -5,4 +5,4 @@ COPY pyproject.toml README.md ./
 COPY app ./app
 RUN pip install --no-cache-dir .
 
-CMD ["crawler", "worker"]
+CMD ["crawler", "ui", "--host", "0.0.0.0", "--no-browser"]

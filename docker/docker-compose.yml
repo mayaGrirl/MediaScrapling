@@ -25,4 +25,6 @@ services:
     depends_on:
       - redis
       - mysql
-    command: ["crawler", "worker"]
+    ports:
+      - "8080:8080"
+    command: ["crawler", "ui", "--host", "0.0.0.0", "--no-browser"]

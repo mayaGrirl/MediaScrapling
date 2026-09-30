@@ -10,4 +10,4 @@ if (-not (Test-Path .env)) {
     Copy-Item .env.example .env
 }
 
-uv run crawler worker
+uv run crawler ui

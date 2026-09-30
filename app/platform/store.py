@@ -1,4 +1,6 @@
-from sqlalchemy import JSON, String, Text, create_engine
+from datetime import datetime
+
+from sqlalchemy import JSON, DateTime, String, Text, case, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from app.platform.config import Settings
@@ -19,6 +21,7 @@ class JobRow(Base):
     platform: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(32))
     error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class VideoRow(Base):
@@ -40,6 +43,10 @@ class Store:
 
     def create_tables(self) -> None:
         Base.metadata.create_all(self._engine)
+        columns = {column["name"] for column in inspect(self._engine).get_columns("jobs")}
+        if "created_at" not in columns:
+            with self._engine.begin() as connection:
+                connection.execute(text("ALTER TABLE jobs ADD COLUMN created_at DATETIME NULL"))
 
     def save_job(self, job: Job) -> None:
         with Session(self._engine) as session:
@@ -62,7 +69,12 @@ class Store:
 
     def list_jobs(self, limit: int = 50) -> list[Job]:
         with Session(self._engine) as session:
-            rows = session.query(JobRow).limit(limit).all()
+            rows = (
+                session.query(JobRow)
+                .order_by(case((JobRow.created_at.is_(None), 1), else_=0), JobRow.created_at.desc())
+                .limit(limit)
+                .all()
+            )
             return [
                 Job(
                     id=row.id,

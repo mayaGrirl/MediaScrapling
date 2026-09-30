@@ -23,7 +23,8 @@ def execute(job: Job, ctx: PlatformContext) -> Job:
             item = enrich_with_web(item, html)
         else:
             item, html = run_web(job, ctx)
-            promote_known_links(html, job.url, ctx, job)
+            for child in promote_known_links(html, job.url, ctx, job):
+                ctx.store.save_job(child)
         ctx.store.save_video(item)
         job.status = "done"
         job.error = ""
@@ -40,6 +41,7 @@ def execute(job: Job, ctx: PlatformContext) -> Job:
 
 
 def serve(ctx: PlatformContext, once: bool = False) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     ctx.store.create_tables()
     while True:
         job = ctx.queue.pop(timeout=2 if once else 5)

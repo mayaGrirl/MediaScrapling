@@ -94,17 +94,21 @@ uv run crawler --help
 
 ### 日常操作
 
-先保证 Redis 和 MySQL 可用，再开一个终端跑 worker，另一个终端入队。
+先保证 Redis 和 MySQL 可用，然后启动控制台。这条命令会同时跑 worker，并打开浏览器。
 
 ```powershell
-uv run crawler worker
+uv run crawler ui
 ```
 
-入队。域名决定能力，不需要手写类型。
+浏览器地址是 `http://127.0.0.1:8080`。服务先完成监听，再打开浏览器。页面上可以填写 `http` 或 `https` 网址入队、添加代理、查看任务。列表按创建时间倒序，每 3 秒刷新。网页里发现的已知站点链接会作为新任务出现在同一张表里。
+
+`--host 0.0.0.0` 时页面仍用本机 `127.0.0.1` 打开。不需要弹浏览器时加 `--no-browser`。
+
+仍然可以用命令行：
 
 ```powershell
 uv run crawler crawl https://example.com
-uv run crawler crawl "https://www.bilibili.com/video/BV1xx" --keyword ""
+uv run crawler worker
 ```
 
 | URL 主机 | capability | platform |
@@ -195,7 +199,7 @@ ctx.sessions.put("bili", "SESSDATA=...")
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-三个服务：`redis`、`mysql`、`platform`。`platform` 的 Redis 和 MySQL 指向 compose 内部主机名，并把 `third_party/MediaCrawler` 挂到 `/opt/MediaCrawler`。容器启动命令是 `crawler worker`。
+三个服务：`redis`、`mysql`、`platform`。`platform` 监听 `8080`，容器内执行 `crawler ui --host 0.0.0.0 --no-browser`。浏览器打开 `http://127.0.0.1:8080`。`platform` 的 Redis 和 MySQL 指向 compose 内部主机名，并把 `third_party/MediaCrawler` 挂到 `/opt/MediaCrawler`。
 
 要用自己的远程 MySQL 时，改 `docker/docker-compose.yml` 里 `platform.environment.MYSQL_URL`，不要把密码写进 README 或提交到 Git。
 
@@ -208,7 +212,7 @@ docker compose -f docker/docker-compose.yml up --build
 | 改两种能力如何交接 | `app/cooperate.py`。`enrich_with_web` 只补空字段。`promote_known_links` 负责入队。 |
 | 改 MediaCrawler 调用方式 | `app/capabilities/media.py` 的 `command` 和 `_read_result`。 |
 | 改表结构 | `app/platform/store.py`。当前只在启动时 `create_all`，没有迁移工具。改列后需要自己处理已有表。 |
-| 加命令 | `app/cli.py`。 |
+| 加命令或页面 | `app/cli.py`、`app/server.py`、`app/console.html`。页面文件要随包发布，已写在 `pyproject.toml` 的 package-data 里。 |
 | 加测试 | `tests/`。不要在测试里请求外站或依赖真实 Redis。 |
 
 执行一条任务的入口是 `app.platform.worker.execute`。新能力不要自己连数据库，通过 `PlatformContext` 使用队列、代理、会话和 `Store`。
@@ -289,21 +293,13 @@ uv run crawler --help
 
 ### Operate
 
-Terminal A:
+Terminal:
 
 ```powershell
-uv run crawler worker
+uv run crawler ui
 ```
 
-Terminal B:
-
-```powershell
-uv run crawler crawl https://example.com
-uv run crawler crawl "https://www.bilibili.com/video/BV1xx"
-uv run crawler jobs --limit 20
-uv run crawler proxy-add http://127.0.0.1:7890
-uv run crawler worker --once
-```
+This starts the worker and opens `http://127.0.0.1:8080` after the server is listening. The page accepts only `http` and `https` URLs, adds proxies, and refreshes the newest jobs every 3 seconds. Links to known hosts found on a web page show up in the same table. `--host 0.0.0.0` still opens `127.0.0.1`. Pass `--no-browser` to skip the window. `crawler crawl` and `crawler worker` remain available.
 
 Host mapping: `xiaohongshu.com` → `xhs`, `douyin.com` → `dy`, `kuaishou.com` → `ks`, `bilibili.com` and `b23.tv` → `bili`, `weibo.com` → `wb`, `tieba.baidu.com` → `tieba`, `zhihu.com` → `zhihu`. Every other host is `web`.
 
@@ -338,7 +334,7 @@ Override `platform.environment.MYSQL_URL` in the compose file when you want an e
 | Hand-off rules | `app/cooperate.py` |
 | MediaCrawler command and result file | `app/capabilities/media.py` |
 | Tables | `app/platform/store.py` (`create_all` only, no migrations) |
-| CLI | `app/cli.py` |
+| CLI and console | `app/cli.py`, `app/server.py`, `app/console.html` |
 
 Call `app.platform.worker.execute` for one job. New capabilities should use `PlatformContext` instead of opening their own database clients.
 
