@@ -1,3 +1,5 @@
+import redis
+
 from app.platform.config import Settings
 from app.platform.models import Job
 from app.platform.redis_client import redis_client
@@ -13,7 +15,10 @@ class JobQueue:
         self._redis.rpush(QUEUE_KEY, job.model_dump_json())
 
     def pop(self, timeout: int = 5) -> Job | None:
-        item = self._redis.blpop(QUEUE_KEY, timeout=timeout)
+        try:
+            item = self._redis.blpop(QUEUE_KEY, timeout=timeout)
+        except redis.TimeoutError:
+            return None
         if not item:
             return None
         return Job.model_validate_json(item[1])

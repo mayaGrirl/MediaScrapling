@@ -44,7 +44,13 @@ def serve(ctx: PlatformContext, once: bool = False) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     ctx.store.create_tables()
     while True:
-        job = ctx.queue.pop(timeout=2 if once else 5)
+        try:
+            job = ctx.queue.pop(timeout=2 if once else 5)
+        except Exception:
+            log.exception("queue pop failed")
+            if once:
+                return
+            continue
         if job is None:
             if once:
                 return
