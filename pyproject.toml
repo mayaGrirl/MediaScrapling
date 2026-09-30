@@ -1,0 +1,28 @@
+[project]
+name = "universal-video-crawler"
+version = "0.1.0"
+description = "One platform that runs MediaCrawler platform jobs and Scrapling web jobs together."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scrapling[fetchers]>=0.2",
+    "sqlalchemy>=2.0",
+    "typer>=0.15",
+]
+
+[project.scripts]
+crawler = "app.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

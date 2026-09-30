@@ -1,0 +1,28 @@
+services:
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: crawler
+    ports:
+      - "3306:3306"
+  platform:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ../.env.example
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      MYSQL_URL: mysql+pymysql://root:root@mysql:3306/crawler
+      MEDIACRAWLER_HOME: /opt/MediaCrawler
+    volumes:
+      - ../third_party/MediaCrawler:/opt/MediaCrawler
+    depends_on:
+      - redis
+      - mysql
+    command: ["crawler", "worker"]
