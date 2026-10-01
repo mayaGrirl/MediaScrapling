@@ -66,7 +66,7 @@
       <h2>任务</h2>
       <p class="muted">未开始的任务可以删除。正在执行的任务会标记为停止，这一次采集结束后不再写入结果。</p>
       <table>
-        <thead><tr><th>状态</th><th>方式</th><th>平台</th><th>地址</th><th>说明</th><th></th></tr></thead>
+        <thead><tr><th>状态</th><th>方式</th><th>平台</th><th>关键词</th><th>目标</th><th>已采集</th><th>地址</th><th>说明</th><th></th></tr></thead>
         <tbody id="job-rows"></tbody>
       </table>
     </section>
@@ -123,10 +123,13 @@
           <td class="status ${escapeHtml(job.status)}">${escapeHtml(job.status)}</td>
           <td>${escapeHtml(names[job.capability] || job.capability)}</td>
           <td>${escapeHtml(job.platform || "-")}</td>
+          <td>${escapeHtml(job.keyword || "-")}</td>
+          <td>${escapeHtml(job.target_count || 1)}</td>
+          <td>${videoRows.filter((item) => item.job_id === job.id).length}</td>
           <td class="url">${escapeHtml(job.url)}</td>
           <td class="err">${escapeHtml(job.error || "")}</td>
           <td><button class="danger" data-job="${escapeHtml(job.id)}">删除</button></td>
-        </tr>`).join("") || `<tr><td colspan="6">还没有任务</td></tr>`;
+        </tr>`).join("") || `<tr><td colspan="9">还没有任务</td></tr>`;
       }
       if (videosKey !== lastVideos) {
         lastVideos = videosKey;

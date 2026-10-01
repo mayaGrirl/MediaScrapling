@@ -132,6 +132,17 @@ def _fill_from_page_when_search_empty() -> None:
         import re
 
         limit = max(1, int(os.environ.get("MEDIASCRAPLING_LIMIT", "1")))
+        import config
+        from urllib.parse import quote
+
+        keyword = (getattr(config, "KEYWORDS", "") or "").split(",")[0].strip()
+        if keyword:
+            await self.context_page.goto(
+                "https://www.douyin.com/search/" + quote(keyword) + "?type=video",
+                wait_until="commit",
+                timeout=60000,
+            )
+            await self.context_page.wait_for_timeout(6000)
         pattern = re.compile(
             r'awemeId\\":\\"(\d{15,})\\".*?desc\\":\\"(.*?)\\".*?cover\\":\\"((?:https:(?:\\u0026|\\/|[^"\\])+))'
         )
@@ -152,6 +163,11 @@ def _fill_from_page_when_search_empty() -> None:
                 stale = 0
             if len(found) >= limit or stale >= 3:
                 break
+        if keyword and not found:
+            from tools import utils
+
+            utils.logger.error("[DouYinCrawler.search] 关键词搜索页没有视频，未改用推荐流")
+            return
             await self.context_page.mouse.wheel(0, 2800)
             await self.context_page.wait_for_timeout(2000)
         for aweme_id, (title, cover) in list(found.items())[:limit]:

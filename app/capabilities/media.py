@@ -138,6 +138,8 @@ def _read_results(save_dir: Path) -> list[dict]:
 
 
 def _explain(text: str) -> str:
+    if "关键词搜索页没有视频" in text:
+        return "按关键词打开了搜索页，但页面上没有视频。这次没有改用推荐流，所以结果里不会混入无关视频。"
     if "qrcode not found" in text or "login dialog box does not pop up" in text:
         return "抖音没有出现登录二维码，这次没有抓到视频。请在弹出的浏览器里手动登录，或在新建任务时填入已登录的 Cookie 后再入队。"
     if "Executable doesn't exist" in text:
