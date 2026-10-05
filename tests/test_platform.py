@@ -26,6 +26,14 @@ def test_classify_known_and_unknown():
     capability, platform = classify("https://www.bilibili.com/video/BV1")
     assert capability == "resolve"
     assert platform == "bili"
+    capability, platform = classify("https://example.com/animation")
+    assert capability == "web"
+    capability, platform = classify("https://github.com/octocat/Hello-World")
+    assert capability == "reach"
+    assert platform == "github"
+    capability, platform = classify("https://www.v2ex.com/")
+    assert capability == "reach"
+    assert platform == "v2ex"
     capability, platform = classify("https://www.douyin.com/")
     assert capability == "media"
     assert platform == "dy"

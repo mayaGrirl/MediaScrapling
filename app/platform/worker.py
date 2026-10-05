@@ -3,6 +3,7 @@
 import logging
 
 from app.capabilities.media import MediaCrawlerUnavailable, run_media
+from app.capabilities.reach import run_reach
 from app.capabilities.resolve import run_resolve
 from app.capabilities.web import run_web
 from app.cooperate import enrich_with_web, promote_known_links
@@ -23,7 +24,10 @@ def execute(job: Job, ctx: PlatformContext) -> Job:
     ctx.store.save_job(job)
     _log(ctx, job.id, "info", f"开始 {job.capability} {job.platform or '-'} {job.url}")
     try:
-        if job.capability == "resolve":
+        if job.capability == "reach":
+            items = run_reach(job)
+            html = ""
+        elif job.capability == "resolve":
             items = run_resolve(job)
             html = ""
         elif job.capability == "media":

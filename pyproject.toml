@@ -13,6 +13,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "typer>=0.15",
     "yt-dlp>=2025.1",
+    "agent-reach @ git+https://github.com/Panniantong/Agent-Reach.git",
     "uvicorn>=0.32",
 ]
 

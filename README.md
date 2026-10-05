@@ -2,7 +2,7 @@
 
 [简体中文](#简体中文) · [English](#english)
 
-MediaScrapling 是这些采集项目的**同一个入口**。你只启动一个 worker，只维护一条 Redis 队列、一个代理池、一个 Cookie 库和一张 MySQL 结果表。具体视频链接用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 解析，国内站点的搜索和主页用 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)，其余网页用 [Scrapling](https://github.com/D4Vinci/Scrapling)。
+MediaScrapling 是这些采集项目的**同一个入口**。你只启动一个 worker，只维护一条 Redis 队列、一个代理池、一个 Cookie 库和一张 MySQL 结果表。入队后按地址分流：具体视频链接用 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，国内站点的搜索和主页用 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)，V2EX、雪球、GitHub 和 RSS 用 [Agent Reach](https://github.com/Panniantong/Agent-Reach)，其余网页用 [Scrapling](https://github.com/D4Vinci/Scrapling)。
 
 <a id="简体中文"></a>
 
@@ -16,15 +16,17 @@ MediaScrapling 是这些采集项目的**同一个入口**。你只启动一个 
 | 平台搜索 | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | 小红书、抖音、快手、B 站、微博、贴吧、知乎的首页和搜索。源码在 `third_party/MediaCrawler`，不复制进本仓库。未登录时这些站点经常拒绝接口。 |
 | 账号接口 | [ShilongLee/Crawler](https://github.com/ShilongLee/Crawler) | 同一批国内平台，但上游要求先添加账号。本平台不内嵌它的服务。需要时单独部署，结果仍应写回这里的队列，而不是再做一个控制台。 |
 | 已登录浏览器 | [iszhouhua/social-media-copilot](https://github.com/iszhouhua/social-media-copilot) | 小红书、抖音、快手的浏览器插件，用你自己的登录态。它不是 Python 库，不能塞进 worker。插件采到的公开字段可以经本平台的入队接口写入同一张结果表。 |
+| 多渠道阅读 | [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach) | 免登录渠道直接调用它的 Python 接口：V2EX 热门、雪球热帖、GitHub 公开仓库、RSS。需要登录的 Twitter、Reddit、小红书仍走它自己的上游，不在这个进程里代登录。 |
 | 网页能力 | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | 上面都不匹配的网页，例如视频号首页。只拿页面能看到的标题和链接，不保证有视频文件。 |
 | 平台本身 | 本仓库 | 任务、队列、代理、会话、落库、可视化操作界面。入口只有 `http://127.0.0.1:8080`。 |
 
 合成之后的行为：
 
-- 一个 `crawler worker` 同时消费两种任务。
-- 网页里出现已知站点链接时，向**同一条队列**追加一条 MediaCrawler 任务。
+- 一个 `crawler worker` 消费全部任务。能力名是 `resolve`（视频链接）、`media`（站点搜索）、`reach`（Agent Reach）、`web`（普通网页）。
+- 网页里出现已知站点、视频链接或 GitHub / V2EX / 雪球 / RSS 时，向**同一条队列**追加任务。
 - MediaCrawler 若返回 HTML，由 Scrapling 补同一条记录里空着的标题、视频地址、封面。
-- 代理和 Cookie 只放在 Redis。两种能力都从这里读。
+- 抖音搜索接口为空时，只打开该关键词的搜索页。搜索页没有视频就失败，不用推荐流充数。
+- 代理和 Cookie 只放在 Redis。代理池每 5 分钟从公开列表重测，最多保留 20 个可用地址。池子为空时本次直连。
 
 MediaCrawler 使用全局配置和浏览器，不能和 Scrapling 挤在同一个解释器里。worker 处理平台任务时会拉起短生命周期子进程。这个子进程没有自己的队列和数据库。
 
@@ -42,7 +44,9 @@ app/platform/worker.py     唯一消费循环
 app/capabilities/web.py    Scrapling 抓取与字段解析
 app/capabilities/media.py  调用 MediaCrawler 一次并读回 JSON
 app/capabilities/resolve.py 用 yt-dlp 解析具体视频链接
-app/cooperate.py           HTML 补字段；已知链接升级为平台任务
+app/capabilities/reach.py  Agent Reach 的免登录渠道
+app/console.html           控制台：新建、任务、结果、日志四个标签
+app/cooperate.py           HTML 补字段；已知链接升级为后续任务
 docker/                    一个 platform 服务 + Redis + MySQL
 scripts/run_local.ps1      Windows 本机启动 worker
 tests/                     不访问外网的单元测试
@@ -104,7 +108,7 @@ uv run crawler --help
 uv run crawler ui
 ```
 
-浏览器地址是 `http://127.0.0.1:8080`。服务先完成监听，再打开浏览器。页面上可以填写 `http` 或 `https` 网址入队、删除还没跑完的任务。采集结果在当前页播放视频、显示封面，并预览网页。采集过程写在单独页面 `http://127.0.0.1:8080/logs`。列表每 3 秒刷新。网页里发现的已知站点链接会作为新任务出现在同一张表里。代理由 MediaCrawler 和 Scrapling 在采集过程中处理，控制台不单独配置代理池。
+浏览器地址是 `http://127.0.0.1:8080`。服务先完成监听，再打开浏览器。主界面分成四个标签：新建、任务、结果、日志。新建时填写网址、目标条数、关键词和可选 Cookie。任务表显示关键词、目标条数和已采集条数。结果里有播放地址就播放，否则显示封面；外站页面用新窗口打开，不嵌进本页。日志标签可以清屏，`http://127.0.0.1:8080/logs` 仍是独立日志页。列表每 3 秒刷新。页面上会显示当前可用代理数量，不单独填写代理。
 
 `--host 0.0.0.0` 时页面仍用本机 `127.0.0.1` 打开。不需要弹浏览器时加 `--no-browser`。
 
@@ -118,12 +122,18 @@ uv run crawler worker
 | URL 主机 | capability | platform |
 | --- | --- | --- |
 | xiaohongshu.com | media | xhs |
-| douyin.com、v.douyin.com | media | dy |
-| kuaishou.com | media | ks |
-| bilibili.com、b23.tv | media | bili |
+| douyin.com、v.douyin.com 的首页和搜索 | media | dy |
+| douyin.com、kuaishou.com、bilibili.com 的 `/video/` | resolve | dy / ks / bili |
+| kuaishou.com 首页 | media | ks |
+| bilibili.com、b23.tv 的首页和搜索 | media | bili |
 | weibo.com、m.weibo.cn | media | wb |
 | tieba.baidu.com | media | tieba |
 | zhihu.com | media | zhihu |
+| youtube.com、youtu.be、tiktok.com、vimeo.com、x.com | resolve | 对应站点名 |
+| v2ex.com | reach | v2ex |
+| xueqiu.com | reach | xueqiu |
+| github.com/用户/仓库 | reach | github |
+| 路径以 `/feed`、`/rss`、`.xml`、`.atom` 结尾 | reach | rss |
 | 其它 | web | 空 |
 
 查看最近任务：
@@ -208,7 +218,9 @@ docker compose -f docker/docker-compose.yml up --build
 | 增加一个已知站点 | `app/platform/models.py` 的 `HOST_PLATFORM`。值必须是 MediaCrawler 的平台代码。 |
 | 改网页抽字段 | `app/capabilities/web.py` 的 `parse_html`。保持返回 `title`、`video_url`、`cover_url`。 |
 | 改两种能力如何交接 | `app/cooperate.py`。`enrich_with_web` 只补空字段。`promote_known_links` 负责入队。 |
-| 改 MediaCrawler 调用方式 | `app/capabilities/media.py` 的 `command` 和 `_read_result`。 |
+| 改 MediaCrawler 调用方式 | `app/capabilities/media.py` 的 `command` 和 `_read_results`。 |
+| 改视频链接解析 | `app/capabilities/resolve.py`。 |
+| 改 Agent Reach 渠道 | `app/capabilities/reach.py`。只接免登录读取。 |
 | 改表结构 | `app/platform/store.py`。当前只在启动时 `create_all`，没有迁移工具。改列后需要自己处理已有表。 |
 | 加命令或页面 | `app/cli.py`、`app/server.py`、`app/console.html`。页面文件要随包发布，已写在 `pyproject.toml` 的 package-data 里。 |
 | 加测试 | `tests/`。不要在测试里请求外站或依赖真实 Redis。 |
@@ -223,13 +235,13 @@ uv run pytest
 
 ### 许可与使用范围
 
-MediaCrawler 上游是非商业学习许可。Scrapling 使用它自己的许可证。使用本平台采集公开数据时，同时遵守两个上游的许可证、目标站点条款，以及你所在地的法律。不要用它做未授权访问或绕过访问控制。
+MediaCrawler 上游是非商业学习许可。Scrapling、yt-dlp、Agent Reach 各用自己的许可证。使用本平台采集公开数据时，同时遵守这些上游的许可证、目标站点条款，以及你所在地的法律。不要用它做未授权访问或绕过访问控制。
 
 <a id="english"></a>
 
 ## English
 
-MediaScrapling is one entry for several crawlers. One worker, one Redis queue, one proxy pool, one cookie store, one MySQL schema. Concrete video URLs go through [yt-dlp](https://github.com/yt-dlp/yt-dlp). Chinese site search and homepages go through [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler). Everything else goes through [Scrapling](https://github.com/D4Vinci/Scrapling).
+MediaScrapling is one entry for several crawlers. One worker, one Redis queue, one proxy pool, one cookie store, one MySQL schema. Concrete video URLs go through [yt-dlp](https://github.com/yt-dlp/yt-dlp). Chinese site search and homepages go through [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler). V2EX, Xueqiu, public GitHub repositories, and RSS go through [Agent Reach](https://github.com/Panniantong/Agent-Reach). Everything else goes through [Scrapling](https://github.com/D4Vinci/Scrapling).
 
 ### What lives where
 
@@ -239,10 +251,11 @@ MediaScrapling is one entry for several crawlers. One worker, one Redis queue, o
 | Platform search | [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Homepages and keyword search for Xiaohongshu, Douyin, Kuaishou, Bilibili, Weibo, Tieba, and Zhihu. Cloned under `third_party/MediaCrawler`. These sites often reject anonymous API calls. |
 | Account API | [ShilongLee/Crawler](https://github.com/ShilongLee/Crawler) | Same Chinese sites, but that project requires an added account. It is not embedded. Deploy it separately and keep results on this queue. |
 | Logged-in browser | [iszhouhua/social-media-copilot](https://github.com/iszhouhua/social-media-copilot) | Browser extension for Xiaohongshu, Douyin, and Kuaishou. It is not a Python library. Fields it collects can be posted to this platform's enqueue API. |
+| Multi-channel reading | [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach) | Zero-login reads: V2EX hot or node topics, Xueqiu hot posts, a public GitHub repo, and RSS. Login channels such as Twitter, Reddit, and Xiaohongshu stay on Agent Reach's own tools. This process does not log in for them. |
 | Web capability | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | HTTP fetch and HTML parsing via the `scrapling[fetchers]` dependency. |
-| Platform | This repo | Jobs, queue, proxies, sessions, storage, the browser console, and the hand-off between the two. |
+| Platform | This repo | Jobs, queue, proxies, sessions, storage, and the console tabs: create, jobs, results, logs. |
 
-A page fetched by Scrapling that links to a known host enqueues a MediaCrawler job on the same queue. HTML returned by MediaCrawler is parsed by Scrapling to fill an empty title, video URL, or cover. MediaCrawler runs as a short-lived child process because its global config and browser cannot share an interpreter with Scrapling.
+A page fetched by Scrapling that links to a known host, a concrete video, GitHub, V2EX, Xueqiu, or an RSS path enqueues another job on the same queue. HTML returned by MediaCrawler is parsed by Scrapling to fill an empty title, video URL, or cover. MediaCrawler runs as a short-lived child process because its global config and browser cannot share an interpreter with Scrapling. The console is four tabs. The job table shows the keyword, the requested count, and how many rows were saved. Douyin keyword search does not fall back to the recommend feed.
 
 ### Layout
 

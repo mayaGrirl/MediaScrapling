@@ -23,7 +23,7 @@ def promote_known_links(html: str, base_url: str, ctx: PlatformContext, parent: 
     created: list[Job] = []
     for url in links(html, base_url):
         capability, platform = classify(url)
-        if capability not in {"media", "resolve"}:
+        if capability not in {"media", "resolve", "reach"}:
             continue
         job = Job(
             url=url,
